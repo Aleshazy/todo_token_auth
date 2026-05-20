@@ -1,0 +1,11 @@
+# Пример конфигурации Cloudflare Tunnel
+# Замените <TUNNEL_ID> на идентификатор вашего туннеля
+# Замените <имя_домена> на ваш домен или поддомен
+# Замените путь к credentials-file на путь к вашему файлу с учетными данными.
+
+ tunnel: <TUNNEL_ID>
+ credentials-file: C:\Users\<ваш_пользователь>\.cloudflared\<TUNNEL_ID>.json
+ ingress:
+   - hostname: <имя_домена>
+     service: http://localhost:8000
+   - service: http_status:404
