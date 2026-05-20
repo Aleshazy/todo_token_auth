@@ -1,31 +1,30 @@
 import secrets
 from datetime import datetime, timedelta
 from fastapi import Depends, Header, HTTPException
-from passlib.context import CryptContext
+import bcrypt # Используем чистый bcrypt напрямую
 from sqlalchemy.orm import Session
-from app.core.config import TOKEN_LIFETIME_MINUTES
+
+# ИМПОРТИРУЕМ ВСЁ НЕОБХОДИМОЕ ИЗ НАШИХ ПАПОК
 from app.db.database import get_db
 from app.db.models import AuthToken, User
 
-# This module contains all auth helpers used by API routes:
-# 1) password hashing/check,
-# 2) token creation,
-# 3) user resolution from Authorization header.
+TOKEN_LIFETIME_MINUTES = 60
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
-# Hash password before storing in DB.
+# Хеширование пароля перед сохранением в базу (напрямую через bcrypt)
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # Переводим строку в байты, генерируем соль и хешируем
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8') # Возвращаем обратно как строку для базы данных
 
-
-# Compare plain password with hash.
+# Проверка обычного пароля с хешем из базы данных
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    plain_bytes = plain.encode('utf-8')
+    hashed_bytes = hashed.encode('utf-8')
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
-
-# Create and store token with expiration.
+# Создание и сохранение случайного токена для сессии пользователя
 def create_token_for_user(db: Session, user: User):
     token_value = secrets.token_hex(32)
     expires_at = datetime.utcnow() + timedelta(minutes=TOKEN_LIFETIME_MINUTES)
@@ -40,15 +39,13 @@ def create_token_for_user(db: Session, user: User):
 
     return token_value, expires_at
 
-
-# Support both "Bearer <token>" and raw token formats.
+# Поддержка форматов "Bearer <token>" и обычного токена
 def extract_bearer(authorization: str) -> str:
     if authorization.startswith("Bearer "):
         return authorization[len("Bearer ") :].strip()
     return authorization.strip()
 
-
-# Resolve current user from Authorization header.
+# Защитная функция: извлекает пользователя по токену из заголовков HTTP-запроса
 def get_current_user(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),

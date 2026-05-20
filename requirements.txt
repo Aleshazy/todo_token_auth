@@ -1,12 +1,4 @@
-# API framework
 fastapi
-# ASGI server
 uvicorn
-# ORM
 sqlalchemy
-# PostgreSQL driver
-psycopg[binary]
-# .env loader
-python-dotenv
-# Password hashing
 passlib[bcrypt]

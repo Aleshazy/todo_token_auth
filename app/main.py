@@ -14,29 +14,15 @@ from app.schemas import (
 )
 from app.services.auth import create_token_for_user, get_current_user, hash_password, verify_password
 
-# Main API module.
-# Request flow: route -> auth dependency (if protected) -> ORM query -> schema response.
-
-# POST /register -> create account
-# POST /login -> get token
-# GET /todos -> all my todos
-# GET /todos/pending -> only incomplete
-# GET /todos/pending/count -> number of incomplete
-# POST /todos -> create todo
-# PATCH /todos/{todo_id}/status -> change completion
-# DELETE /todos/{todo_id} -> delete completed todo
 app = FastAPI(title="TODO List API")
 
-
+# Создаем таблицы в БД при запуске приложения
 @app.on_event("startup")
-# Create tables at app startup.
 def startup():
     Base.metadata.create_all(bind=engine)
 
-
-# Public auth routes.
+# 1. Регистрация
 @app.post("/register")
-# Create a new user account.
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.username == payload.username).first()
     if existing:
@@ -48,9 +34,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.refresh(user)
     return {"id": user.id, "username": user.username}
 
-
+# 2. Логин
 @app.post("/login", response_model=TokenResponse)
-# Authenticate user and return access token.
 def login_user(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
@@ -59,36 +44,24 @@ def login_user(payload: LoginRequest, db: Session = Depends(get_db)):
     token, expires_at = create_token_for_user(db, user)
     return TokenResponse(access_token=token, expires_at=expires_at)
 
-
-# Protected todo routes.
+# 3. Получить ВСЕ задачи пользователя
 @app.get("/todos", response_model=List[TodoResponse])
-# Return all todos for current user.
 def get_all_todos(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = db.query(Todo).filter(Todo.owner_id == current_user.id).order_by(Todo.id).all()
-    return rows
+    return db.query(Todo).filter(Todo.owner_id == current_user.id).order_by(Todo.id).all()
 
-
+# 4. Получить только НЕВЫПОЛНЕННЫЕ задачи
 @app.get("/todos/pending", response_model=List[TodoResponse])
-# Return only incomplete todos.
 def get_pending_todos(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    rows = (
-        db.query(Todo)
-        .filter(Todo.owner_id == current_user.id, Todo.is_complete == False)
-        .order_by(Todo.id)
-        .all()
-    )
-    return rows
+    return db.query(Todo).filter(Todo.owner_id == current_user.id, Todo.is_complete == False).order_by(Todo.id).all()
 
-
+# 5. Количество невыполненных задач
 @app.get("/todos/pending/count", response_model=PendingCountResponse)
-# Count incomplete todos using ORM.
 def get_pending_todos_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     pending_count = db.query(Todo).filter(Todo.owner_id == current_user.id, Todo.is_complete == False).count()
     return PendingCountResponse(pending_count=pending_count)
 
-
+# 6. Создать новую задачу
 @app.post("/todos", response_model=TodoResponse, status_code=201)
-# Create a new todo for current user.
 def create_todo(payload: TodoCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     todo = Todo(
         title=payload.title,
@@ -101,9 +74,8 @@ def create_todo(payload: TodoCreate, current_user: User = Depends(get_current_us
     db.refresh(todo)
     return todo
 
-
+# 7. Изменить статус задачи (выполнена/нет)
 @app.patch("/todos/{todo_id}/status", response_model=TodoResponse)
-# Update todo completion status.
 def update_todo_status(
     payload: TodoStatusUpdate,
     todo_id: int = Path(ge=1),
@@ -119,9 +91,8 @@ def update_todo_status(
     db.refresh(todo)
     return todo
 
-
+# 8. Удалить задачу (только если она выполнена)
 @app.delete("/todos/{todo_id}")
-# Delete todo only if it is complete.
 def delete_todo(
     todo_id: int = Path(ge=1),
     current_user: User = Depends(get_current_user),

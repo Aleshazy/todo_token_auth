@@ -1,22 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
-from app.core.config import DATABASE_URL
 
-# Engine is a global DB connector.
-engine = create_engine(DATABASE_URL)
+DATABASE_URL = "sqlite:///./todo.db"
 
-# SessionLocal creates one DB session per request.
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine,
-)
-
-# Base is parent class for all ORM models.
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-
-# Provide DB session per request.
 def get_db():
     db = SessionLocal()
     try:
